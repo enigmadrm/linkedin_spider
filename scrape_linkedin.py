@@ -1,4 +1,4 @@
-import aiofiles
+# import aiofiles
 import argparse
 import asyncio
 from dotenv import load_dotenv
@@ -327,6 +327,9 @@ async def main():
     parser.add_argument("--start",
                         help="If first run, how many days in the past should we scrape for posts? -1 for all",
                         default=-1, type=int)
+    parser.add_argument('--increment',
+                        help="Tag the output files with today's date so that you get incremental updates",
+                        action='store_false', default=True)
     parser.add_argument('--excel', help="Export downloaded posts to an Excel file?", action='store_true', default=True)
     parser.add_argument("--openai", help="Upload downloaded posts to OpenAI vector storage?",
                         action='store_true',
@@ -342,31 +345,52 @@ async def main():
     linkedin_password = args.password
 
     # Determine json filename to store posts
-    json_filepath = args.json if not url else url.split('/')[4] + '_posts.json'
+    json_basefilepath = args.json if not url else url.split('/')[4] + '_posts'
+    json_filepath = json_basefilepath
+    if args.increment:
+        json_filepath += f'_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}'
+    json_filepath += '.json'
 
-    # Load any existing posts from file
+    # Load any existing posts from file if we're not doing an incremental update
     posts = []
-    if os.path.isfile(json_filepath):
-        with open(json_filepath, 'r') as file:
-            posts = json.load(file)
+    if not args.increment:
+        if os.path.isfile(json_filepath):
+            with open(json_filepath, 'r') as file:
+                posts = json.load(file)
+
+    days_ago = args.start
 
     # Scrape posts
     new_posts = []
     if url:
-        # find last post in json file and extract date
-        days_ago = args.start
-
-        # check if json_filepath exists
+        last_post_date = None
         if len(posts) > 0:
             last_post_date = posts[-1]['timestamp']
-            # convert timestamp to days ago
+        else:
+            # find the most recent post from the json files in the current directory
+            for file in os.listdir('.'):
+                if file.endswith('.json') and file.startswith(json_basefilepath):
+                    with open(file, 'r') as f:
+                        json_posts = json.load(f)
+                        this_posts_date = json_posts[-1]['timestamp']
+                        if not last_post_date:
+                            last_post_date = this_posts_date
+                        if last_post_date and this_posts_date > last_post_date:
+                            last_post_date = this_posts_date
+
+        # if we found a last_post_date, convert timestamp to days ago and use it
+        if last_post_date:
             days_ago = (pd.Timestamp.now() - pd.to_datetime(last_post_date, unit='ms')).days
 
-        browser = await pyppeteer.launch({
+        params = {
             'headless': False,
-            'executablePath': chrome_path,
-            'userDataDir': profile_dir
-        })
+        }
+        if chrome_path is not None and len(chrome_path) > 0:
+            params['executablePath'] = chrome_path
+        if profile_dir is not None and len(profile_dir) > 0:
+            params['userDataDir'] = profile_dir
+        browser = await pyppeteer.launch(params)
+
         page = await browser.newPage()
 
         viewport = await page.evaluate('''() => {
