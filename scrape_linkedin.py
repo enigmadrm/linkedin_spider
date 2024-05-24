@@ -1,6 +1,8 @@
 # import aiofiles
 import argparse
 import asyncio
+
+import aiofiles
 from dotenv import load_dotenv
 import json
 import mimetypes
@@ -29,9 +31,10 @@ async def login_to_linkedin(page, username, password):
     :return: None
     """
     await page.goto("https://www.linkedin.com/login?fromSignIn=true&trk=guest_homepage-basic_nav-header-signin")
-    await page.waitForSelector('#username')
+    await page.waitForSelector('#password')
     await page.waitFor(1000)
-    await page.type('#username', username)
+    if await page.querySelector('#username'):
+        await page.type('#username', username)
     await page.waitForSelector('#password')
     await page.waitFor(1000)
     await page.type('#password', password)
@@ -391,7 +394,17 @@ async def main():
             params['userDataDir'] = profile_dir
         browser = await pyppeteer.launch(params)
 
-        page = await browser.newPage()
+        page = None
+        pages = await browser.pages()
+        if len(pages) > 0:
+            # find the about:blank page by looking backward through the list
+            for the_page in pages[::-1]:
+                if the_page.url == 'about:blank':
+                    page = the_page
+                    break
+
+        if not page:
+            page = await browser.newPage()
 
         viewport = await page.evaluate('''() => {
             return {
