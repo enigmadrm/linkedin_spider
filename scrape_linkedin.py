@@ -16,6 +16,7 @@ vector_store_name = os.environ.get('VECTOR_STORE_NAME')
 linkedin_username = os.environ.get('LINKEDIN_USERNAME')
 linkedin_password = os.environ.get('LINKEDIN_PASSWORD')
 chrome_path = os.environ.get('CHROME_PATH')
+profile_dir = os.environ.get('PROFILE_DIR')
 
 
 async def login_to_linkedin(page, username, password):
@@ -317,7 +318,7 @@ def upload_to_vector_store(vector_store_id, json_filepath):
 
 
 async def main():
-    global vector_store_name, linkedin_password, linkedin_username
+    global vector_store_name, linkedin_password, linkedin_username, chrome_path, profile_dir
 
     parser = argparse.ArgumentParser(
         description='Scrape LinkedIn posts and export them to Excel and/or upload them to an OpenAI vector store')
@@ -361,7 +362,11 @@ async def main():
             # convert timestamp to days ago
             days_ago = (pd.Timestamp.now() - pd.to_datetime(last_post_date, unit='ms')).days
 
-        browser = await pyppeteer.launch(headless=False, executablePath=chrome_path)
+        browser = await pyppeteer.launch({
+            'headless': False,
+            'executablePath': chrome_path,
+            'userDataDir': profile_dir
+        })
         page = await browser.newPage()
 
         viewport = await page.evaluate('''() => {
