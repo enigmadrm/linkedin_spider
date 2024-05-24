@@ -366,24 +366,24 @@ async def main():
     # Scrape posts
     new_posts = []
     if url:
-        last_post_date = None
+        last_post_timestamp = None
         if len(posts) > 0:
-            last_post_date = posts[-1]['timestamp']
+            last_post_timestamp = posts[-1]['timestamp']
         else:
             # find the most recent post from the json files in the current directory
             for file in os.listdir('.'):
                 if file.endswith('.json') and file.startswith(json_basefilepath):
                     with open(file, 'r') as f:
                         json_posts = json.load(f)
-                        this_posts_date = json_posts[-1]['timestamp']
-                        if not last_post_date:
-                            last_post_date = this_posts_date
-                        if last_post_date and this_posts_date > last_post_date:
-                            last_post_date = this_posts_date
+                        post_timestamp = json_posts[-1]['timestamp']
+                        if not last_post_timestamp:
+                            last_post_timestamp = post_timestamp
+                        if last_post_timestamp and post_timestamp > last_post_timestamp:
+                            last_post_timestamp = post_timestamp
 
         # if we found a last_post_date, convert timestamp to days ago and use it
-        if last_post_date:
-            days_ago = (pd.Timestamp.now() - pd.to_datetime(last_post_date, unit='ms')).days
+        if last_post_timestamp:
+            days_ago = (pd.Timestamp.now() - pd.to_datetime(last_post_timestamp, unit='ms')).days
 
         params = {
             'headless': False,
@@ -419,6 +419,10 @@ async def main():
             new_posts = await scrape_company_posts(page, url, days_ago)
         else:
             new_posts = await scrape_user_posts(page, url, days_ago)
+
+        # filter out any posts in new_posts that are older than last_post_date
+        if last_post_timestamp:
+            new_posts = [post for post in new_posts if post['timestamp'] > last_post_timestamp]
 
         await browser.close()
 
