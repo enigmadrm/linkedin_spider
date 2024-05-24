@@ -6,6 +6,8 @@ The purpose is ultimately to enable you query GPT about the data.
 
 ## INSTALL
 
+`pip install -r requirements.txt`
+
 `copy .env.example .env`
 
 Change as needed.
