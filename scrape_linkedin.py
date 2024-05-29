@@ -98,7 +98,9 @@ async def scrape_company_posts(page, url, days_ago):
         
         let results = [];
         for (let post of posts) {
-            let post_id = post.dataset.urn.match(/([0-9]{19})/).pop();
+            let post_id = post.dataset.urn.match(/([0-9]{19})/)
+            post_id = post_id ? post_id.pop() : null;
+            if (!post_id) continue;
             let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
             let text = textElement ? textElement.innerText : '';

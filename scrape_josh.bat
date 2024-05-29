@@ -4,4 +4,4 @@ if exist .venv\Scripts\activate.bat (
     call .venv\Scripts\activate.bat
 )
 
-python scrape_linkedin.py --url="https://www.linkedin.com/in/joshuabrandau/recent-activity/all/" --excel --openai
+python scrape_linkedin.py --url="https://www.linkedin.com/in/joshuabrandau/recent-activity/all/" --excel
