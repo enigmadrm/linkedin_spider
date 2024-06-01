@@ -191,13 +191,16 @@ async def scrape_user_posts(page, url, days_ago):
             let repost_text = null;
             if (is_repost) {
                 let repost = post.querySelector('.update-components-mini-update-v2');
-                repost_id = repost.querySelector('a.update-components-mini-update-v2__link-to-details-page').href.match(/([0-9]{19})/).pop();
-                repost_timestamp = parseInt(BigInt(repost_id).toString(2).slice(0, 41), 2);
-                repost_actor_name = repost.querySelector('.update-components-actor__name').innerText;
-                let degree_element = repost.querySelector('.update-components-actor__supplementary-actor-info > span');
-                repost_degree = degree_element ? degree_element.innerText : '';
-                let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
-                repost_text = commentary_element ? commentary_element.innerText : '';
+                let repost_link = repost.querySelector('a.update-components-mini-update-v2__link-to-details-page');
+                repost_id = repost_link ? repost.querySelector('a.update-components-mini-update-v2__link-to-details-page').href.match(/([0-9]{19})/).pop() : null;
+                if (repost_id) {
+                    repost_timestamp = parseInt(BigInt(repost_id).toString(2).slice(0, 41), 2);
+                    repost_actor_name = repost.querySelector('.update-components-actor__name').innerText;
+                    let degree_element = repost.querySelector('.update-components-actor__supplementary-actor-info > span');
+                    repost_degree = degree_element ? degree_element.innerText : '';
+                    let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
+                    repost_text = commentary_element ? commentary_element.innerText : '';
+                }
             }
             results.push({post_id, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
                           repost_degree, repost_text});
