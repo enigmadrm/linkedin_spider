@@ -132,6 +132,94 @@ async def scrape_company_posts(page, url, days_ago):
     return posts
 
 
+async def scrape_myfeed_posts(page, url, days_ago):
+    """
+    Scrape my LinkedIn posts
+
+    :param page: Pyppeteer page object
+    :param url: LinkedIn company URL
+    :param days_ago: How many days ago to scrape for posts
+    :return: List of posts
+    """
+    await page.goto(url)
+
+    # Click to change sorting from Top to Recent
+    await page.waitForSelector('.scaffold-layout__main button.artdeco-dropdown__trigger')
+    await page.click('.scaffold-layout__main button.artdeco-dropdown__trigger')
+
+    await page.waitForSelector('.artdeco-dropdown--is-open li:nth-child(2)')
+    await page.click('.artdeco-dropdown--is-open li:nth-child(2)')
+
+    # Wait for posts to load
+    await page.waitFor(2000)
+    await page.waitForSelector('.scaffold-finite-scroll__content > div')
+
+    # Page down until no more posts are loaded
+    while True:
+        num_posts = await page.evaluate('''() => {
+            return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length
+        }''')
+
+        await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
+
+        oldest_timestamp = await page.evaluate('''() => {
+            let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
+            let last_post = Array.from(posts).pop();
+            let post_id = last_post.dataset.urn.match(/([0-9]{19})/).pop();
+            return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
+        }''')
+        post_age = (pd.Timestamp.now() - pd.to_datetime(oldest_timestamp, unit='ms')).days
+        if -1 < days_ago < post_age:
+            break
+
+        try:
+            await page.waitForFunction('''(num_posts) => {
+                console.log('num_posts is ' + num_posts);
+                return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length > num_posts;
+            }''', {'timeout': 5000}, str(num_posts))
+        except PyppeteerTimeoutError:
+            break
+
+    # Extract posts
+    posts = await page.evaluate('''() => {
+        let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
+        
+        let results = [];
+        for (let post of posts) {
+            let post_id = post.dataset.urn.match(/([0-9]{19})/)
+            post_id = post_id ? post_id.pop() : null;
+            if (!post_id) continue;
+            let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
+            let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
+            let text = textElement ? textElement.innerText : '';
+            let is_repost = !!post.querySelector('.update-components-mini-update-v2');
+            let repost_id = null;
+            let repost_timestamp = null;
+            let repost_actor_name = null;
+            let repost_degree = null;
+            let repost_text = null;
+            if (is_repost) {
+                let repost = post.querySelector('.update-components-mini-update-v2');
+                repost_id = repost.querySelector('a.update-components-mini-update-v2__link-to-details-page').href.match(/([0-9]{19})/).pop();
+                repost_timestamp = parseInt(BigInt(repost_id).toString(2).slice(0, 41), 2);
+                repost_actor_name = repost.querySelector('.update-components-actor__name').innerText;
+                let degree_element = repost.querySelector('.update-components-actor__supplementary-actor-info > span');
+                repost_degree = degree_element ? degree_element.innerText : '';
+                let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
+                repost_text = commentary_element ? commentary_element.innerText : '';
+            }
+            results.push({post_id, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
+                          repost_degree, repost_text});
+        }
+        
+        return results;
+    }''')
+
+    posts = posts[::-1]
+
+    return posts
+
+
 async def scrape_user_posts(page, url, days_ago):
     """
     Scrape LinkedIn user posts
@@ -145,7 +233,7 @@ async def scrape_user_posts(page, url, days_ago):
 
     # Wait for posts to load
     await page.waitFor(2000)
-    await page.waitForSelector('div.scaffold-finite-scroll__content > ul > li')
+    await page.waitForSelector('div.scaffold-finite-scroll__content > ul > li,div.scaffold-finite-scroll__content > div > div')
 
     # Page down until no more posts are loaded
     while True:
@@ -420,8 +508,10 @@ async def main():
         await page.setViewport(viewport)
         await login_to_linkedin(page, linkedin_username, linkedin_password)
 
-        if 'company' in url:
+        if 'company' in url and 'employee-posts' not in url:
             new_posts = await scrape_company_posts(page, url, days_ago)
+        elif 'linkedin.com/feed' in url:
+            new_posts = await scrape_myfeed_posts(page, url, days_ago)
         else:
             new_posts = await scrape_user_posts(page, url, days_ago)
 
