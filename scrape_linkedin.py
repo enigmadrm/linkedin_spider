@@ -103,6 +103,8 @@ async def scrape_company_posts(page, url, days_ago):
             if (!post_id) continue;
             let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
+            let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
+            let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let text = textElement ? textElement.innerText : '';
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
             let repost_id = null;
@@ -120,7 +122,7 @@ async def scrape_company_posts(page, url, days_ago):
                 let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
                 repost_text = commentary_element ? commentary_element.innerText : '';
             }
-            results.push({post_id, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
+            results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
                           repost_degree, repost_text});
         }
         
@@ -182,6 +184,7 @@ async def scrape_myfeed_posts(page, url, days_ago):
 
     # Extract posts
     posts = await page.evaluate('''() => {
+        //let actor = document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4];
         let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
         
         let results = [];
@@ -190,6 +193,8 @@ async def scrape_myfeed_posts(page, url, days_ago):
             post_id = post_id ? post_id.pop() : null;
             if (!post_id) continue;
             let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
+            let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
+            let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
             let text = textElement ? textElement.innerText : '';
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
@@ -208,7 +213,7 @@ async def scrape_myfeed_posts(page, url, days_ago):
                 let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
                 repost_text = commentary_element ? commentary_element.innerText : '';
             }
-            results.push({post_id, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
+            results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
                           repost_degree, repost_text});
         }
         
@@ -263,12 +268,15 @@ async def scrape_user_posts(page, url, days_ago):
 
     # Extract posts
     posts = await page.evaluate('''() => {
+        //let actor = document.querySelector('.scaffold-layout__sidebar div:nth-child(3) a').href.split('/')[4];
         let posts = document.querySelectorAll('div.scaffold-finite-scroll__content > ul > li .feed-shared-update-v2');
 
         let results = [];
         for (let post of posts) {
             let post_id = post.dataset.urn.match(/([0-9]{19})/).pop();
             let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
+            let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
+            let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
             let text = textElement ? textElement.innerText : '';
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
@@ -290,7 +298,7 @@ async def scrape_user_posts(page, url, days_ago):
                     repost_text = commentary_element ? commentary_element.innerText : '';
                 }
             }
-            results.push({post_id, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
+            results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
                           repost_degree, repost_text});
         }
         
@@ -441,7 +449,7 @@ async def main():
     linkedin_password = args.password
 
     # Determine json filename to store posts
-    json_basefilepath = args.json if not url else url.split('/')[4] + '_posts'
+    json_basefilepath = args.json if not url else url.split('/')[4].split('?')[0] + '_posts'
     json_filepath = json_basefilepath
     if args.increment:
         json_filepath += f'_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}'
@@ -512,6 +520,10 @@ async def main():
             new_posts = await scrape_company_posts(page, url, days_ago)
         elif 'linkedin.com/feed' in url:
             new_posts = await scrape_myfeed_posts(page, url, days_ago)
+            actor = await page.evaluate('''() => {
+                return document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4].split('?')[0];
+            }''')
+            json_filepath = actor + json_filepath
         else:
             new_posts = await scrape_user_posts(page, url, days_ago)
 
