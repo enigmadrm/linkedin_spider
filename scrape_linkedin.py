@@ -523,7 +523,7 @@ async def main():
             actor = await page.evaluate('''() => {
                 return document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4].split('?')[0];
             }''')
-            json_filepath = actor + json_filepath
+            json_filepath = actor + json_filepath.replace('posts', 'feed')
         else:
             new_posts = await scrape_user_posts(page, url, days_ago)
 
