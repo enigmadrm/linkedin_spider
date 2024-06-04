@@ -427,7 +427,7 @@ async def main():
     parser = argparse.ArgumentParser(
         description='Scrape LinkedIn posts and export them to Excel and/or upload them to an OpenAI vector store')
     parser.add_argument("--url", help="The LinkedIn URL to spider")
-    parser.add_argument("--json", help="The json filename to save to", default="output.json")
+    parser.add_argument("--json", help="The json filename to save to", default=None)
     parser.add_argument("--start",
                         help="If first run, how many days in the past should we scrape for posts? -1 for all",
                         default=-1, type=int)
@@ -449,7 +449,7 @@ async def main():
     linkedin_password = args.password
 
     # Determine json filename to store posts
-    json_basefilepath = args.json if not url else url.split('/')[4].split('?')[0] + '_posts'
+    json_basefilepath = (url.split('/')[4].split('?')[0] if not args.json else args.json) + '_posts'
     json_filepath = json_basefilepath
     if args.increment:
         json_filepath += f'_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}'
@@ -523,7 +523,9 @@ async def main():
             actor = await page.evaluate('''() => {
                 return document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4].split('?')[0];
             }''')
-            json_filepath = actor + json_filepath.replace('posts', 'feed')
+            json_filepath = json_filepath.replace('posts', 'feed')
+            if json_filepath.startswith('_feed'):
+                json_filepath = actor + json_filepath
         else:
             new_posts = await scrape_user_posts(page, url, days_ago)
 
