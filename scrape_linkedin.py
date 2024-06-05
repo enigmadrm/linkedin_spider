@@ -551,6 +551,7 @@ async def main():
                                    'repost_actor_name', 'repost_degree', 'repost_text'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df['repost_timestamp'] = pd.to_datetime(df['repost_timestamp'], unit='ms')
+        df['url'] = url
         df.to_excel(json_filepath.replace('.json', '.xlsx'), index=False)
 
     # Upload to OpenAI vector store
