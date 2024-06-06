@@ -106,6 +106,7 @@ async def scrape_company_posts(page, url, days_ago):
             let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
             let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let text = textElement ? textElement.innerText : '';
+            let post_url = 'https://www.linkedin.com/embed/feed/update/urn:li:share:' + post_id;
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
             let repost_id = null;
             let repost_timestamp = null;
@@ -123,7 +124,7 @@ async def scrape_company_posts(page, url, days_ago):
                 repost_text = commentary_element ? commentary_element.innerText : '';
             }
             results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
-                          repost_degree, repost_text});
+                          repost_degree, repost_text, post_url});
         }
         
         return results;
@@ -197,6 +198,7 @@ async def scrape_myfeed_posts(page, url, days_ago):
             let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
             let text = textElement ? textElement.innerText : '';
+            let post_url = 'https://www.linkedin.com/embed/feed/update/urn:li:share:' + post_id;
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
             let repost_id = null;
             let repost_timestamp = null;
@@ -214,7 +216,7 @@ async def scrape_myfeed_posts(page, url, days_ago):
                 repost_text = commentary_element ? commentary_element.innerText : '';
             }
             results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
-                          repost_degree, repost_text});
+                          repost_degree, repost_text, post_url});
         }
         
         return results;
@@ -279,6 +281,7 @@ async def scrape_user_posts(page, url, days_ago):
             let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
             let text = textElement ? textElement.innerText : '';
+            let post_url = 'https://www.linkedin.com/embed/feed/update/urn:li:share:' + post_id;
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
             let repost_id = null;
             let repost_timestamp = null;
@@ -299,7 +302,7 @@ async def scrape_user_posts(page, url, days_ago):
                 }
             }
             results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
-                          repost_degree, repost_text});
+                          repost_degree, repost_text, post_url});
         }
         
         return results;
@@ -547,11 +550,11 @@ async def main():
     # Export posts to Excel
     if args.excel:
         df = pd.DataFrame(posts,
-                          columns=['post_id', 'timestamp', 'text', 'is_repost', 'repost_id', 'repost_timestamp',
-                                   'repost_actor_name', 'repost_degree', 'repost_text'])
+                          columns=['post_id', 'actor_title', 'actor_description', 'timestamp', 'text', 'is_repost',
+                                   'repost_id', 'repost_timestamp', 'repost_actor_name', 'repost_degree',
+                                   'repost_text', 'post_url'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df['repost_timestamp'] = pd.to_datetime(df['repost_timestamp'], unit='ms')
-        df['url'] = url
         df.to_excel(json_filepath.replace('.json', '.xlsx'), index=False)
 
     # Upload to OpenAI vector store
