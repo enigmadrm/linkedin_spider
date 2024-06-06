@@ -249,6 +249,10 @@ async def scrape_myfeed_posts(page, url, days_ago):
             return document.querySelector('.artdeco-toast-item__message a').href;
         }''')
 
+        await page.evaluate('''() => {
+            document.querySelector('.artdeco-toast-item__dismiss').click();
+        }''')
+
     return posts
 
 
