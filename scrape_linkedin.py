@@ -505,6 +505,7 @@ async def main():
 
         params = {
             'headless': False,
+            'timeout': 120000,
         }
         if chrome_path is not None and len(chrome_path) > 0:
             params['executablePath'] = chrome_path
