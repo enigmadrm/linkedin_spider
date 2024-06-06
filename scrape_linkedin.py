@@ -41,7 +41,7 @@ async def login_to_linkedin(page, username, password):
     await page.waitForSelector('form.login__form')
     await page.waitFor(1000)
     await page.click('form.login__form button[type=submit]')
-    await page.waitForNavigation()
+    await page.waitForNavigation({'timeout': 240000})
 
 
 async def scrape_company_posts(page, url, days_ago):
