@@ -108,7 +108,6 @@ async def scrape_company_posts(page, url, days_ago):
             let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
             let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let text = textElement ? textElement.innerText : '';
-            let post_url = 'https://www.linkedin.com/embed/feed/update/urn:li:share:' + post_id;
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
             let repost_id = null;
             let repost_timestamp = null;
@@ -125,6 +124,9 @@ async def scrape_company_posts(page, url, days_ago):
                 let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
                 repost_text = commentary_element ? commentary_element.innerText : '';
             }
+            
+            let post_url = ''
+            
             results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
                           repost_degree, repost_text, post_url});
         }
@@ -202,7 +204,6 @@ async def scrape_myfeed_posts(page, url, days_ago):
             let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
             let text = textElement ? textElement.innerText : '';
-            let post_url = 'https://www.linkedin.com/embed/feed/update/urn:li:share:' + post_id;
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
             let repost_id = null;
             let repost_timestamp = null;
@@ -219,6 +220,11 @@ async def scrape_myfeed_posts(page, url, days_ago):
                 let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
                 repost_text = commentary_element ? commentary_element.innerText : '';
             }
+            
+            post.querySelector('.feed-shared-control-menu__trigger').click();
+            post.querySelector('.artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
+            let post_url = document.querySelector('.artdeco-toast-item__message a').href
+            
             results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
                           repost_degree, repost_text, post_url});
         }
@@ -287,7 +293,6 @@ async def scrape_user_posts(page, url, days_ago):
             let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
             let text = textElement ? textElement.innerText : '';
-            let post_url = 'https://www.linkedin.com/embed/feed/update/urn:li:share:' + post_id;
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
             let repost_id = null;
             let repost_timestamp = null;
@@ -307,6 +312,9 @@ async def scrape_user_posts(page, url, days_ago):
                     repost_text = commentary_element ? commentary_element.innerText : '';
                 }
             }
+            
+            let post_url = '';
+            
             results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
                           repost_degree, repost_text, post_url});
         }
