@@ -221,10 +221,8 @@ async def scrape_myfeed_posts(page, url, days_ago):
                 repost_text = commentary_element ? commentary_element.innerText : '';
             }
             
-            post.querySelector('.feed-shared-control-menu__trigger').click();
-            post.querySelector('.artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
-            let post_url = document.querySelector('.artdeco-toast-item__message a').href
-            
+            let post_url = ''
+             
             results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
                           repost_degree, repost_text, post_url});
         }
@@ -233,6 +231,23 @@ async def scrape_myfeed_posts(page, url, days_ago):
     }''')
 
     posts = posts[::-1]
+
+    for post in posts:
+        await page.evaluate('''() => {
+            document.querySelector('.feed-shared-control-menu__trigger').click();
+        }''')
+
+        await page.waitForSelector('.artdeco-dropdown__content-inner li')
+
+        await page.evaluate('''() => {
+            document.querySelector('.artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
+        }''')
+
+        await page.waitForSelector('.artdeco-toast-item__message a')
+
+        post['post_url'] = await page.evaluate('''() => {
+            return document.querySelector('.artdeco-toast-item__message a').href;
+        }''')
 
     return posts
 
