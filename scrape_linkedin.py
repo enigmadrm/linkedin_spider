@@ -517,6 +517,10 @@ async def main():
             params['userDataDir'] = profile_dir
         browser = await pyppeteer.launch(params)
 
+        # Set default timeout for the browser (in milliseconds)
+        browser._defaultNavigationTimeout = 120000
+        browser._defaultTimeout = 120000
+
         page = None
         pages = await browser.pages()
         if len(pages) > 0:
@@ -536,7 +540,6 @@ async def main():
             }
         }''')
         await page.setViewport(viewport)
-        page.setDefaultNavigationTimeout(120000)
         await login_to_linkedin(page, linkedin_username, linkedin_password)
 
         if 'company' in url and 'employee-posts' not in url:
