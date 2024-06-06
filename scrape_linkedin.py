@@ -532,6 +532,7 @@ async def main():
             }
         }''')
         await page.setViewport(viewport)
+        page.setDefaultNavigationTimeout(120000)
         await login_to_linkedin(page, linkedin_username, linkedin_password)
 
         if 'company' in url and 'employee-posts' not in url:
