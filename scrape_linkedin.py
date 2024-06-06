@@ -458,6 +458,7 @@ async def main():
     parser.add_argument('--store', help="The OpenAI vector store name to upload to", default=vector_store_name)
     parser.add_argument('--username', help="The LinkedIn username", default=linkedin_username)
     parser.add_argument('--password', help="The LinkedIn password", default=linkedin_password)
+    parser.add_argument('--profile', help="The browser profile directory")
     args = parser.parse_args()
 
     url = args.url or None
@@ -502,6 +503,9 @@ async def main():
         # if we found a last_post_date, convert timestamp to days ago and use it
         if last_post_timestamp:
             days_ago = (pd.Timestamp.now() - pd.to_datetime(last_post_timestamp, unit='ms')).days
+
+        if args.profile is not None:
+            profile_dir = args.profile
 
         params = {
             'headless': False,
