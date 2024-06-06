@@ -74,6 +74,8 @@ async def scrape_company_posts(page, url, days_ago):
 
         await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
 
+        await page.waitFor(1000);
+
         oldest_timestamp = await page.evaluate('''() => {
             let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
             let last_post = Array.from(posts).pop();
@@ -165,6 +167,8 @@ async def scrape_myfeed_posts(page, url, days_ago):
 
         await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
 
+        await page.waitFor(1000);
+
         oldest_timestamp = await page.evaluate('''() => {
             let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
             let last_post = Array.from(posts).pop();
@@ -249,6 +253,8 @@ async def scrape_user_posts(page, url, days_ago):
         }''')
 
         await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
+
+        await page.waitFor(1000);
 
         oldest_timestamp = await page.evaluate('''() => {
             let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
