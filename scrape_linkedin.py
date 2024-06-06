@@ -167,9 +167,18 @@ async def scrape_myfeed_posts(page, url, days_ago):
             return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length
         }''')
 
+        initial_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
+
         await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
 
-        await page.waitFor(1000);
+        try:
+            await page.waitForFunction(
+                '''initialScrollHeight => document.body.scrollHeight > initialScrollHeight''',
+                {'timeout': 10000},
+                initial_scroll_height
+            )
+        except TimeoutError:
+            pass
 
         oldest_timestamp = await page.evaluate('''() => {
             let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
@@ -200,8 +209,8 @@ async def scrape_myfeed_posts(page, url, days_ago):
             post_id = post_id ? post_id.pop() : null;
             if (!post_id) continue;
             let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
-            let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
-            let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
+            let actor_title = post.querySelector('.update-components-actor__name span span') ? post.querySelector('.update-components-actor__name span span').textContent.trim() : '';
+            let actor_description = post.querySelector('.update-components-actor__description span') ? post.querySelector('.update-components-actor__description span').textContent.trim() : '';
             let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
             let text = textElement ? textElement.innerText : '';
             let is_repost = !!post.querySelector('.update-components-mini-update-v2');
@@ -233,25 +242,26 @@ async def scrape_myfeed_posts(page, url, days_ago):
     posts = posts[::-1]
 
     for post in posts:
-        await page.evaluate('''() => {
-            document.querySelector('.feed-shared-control-menu__trigger').click();
-        }''')
+        post_selector = f'div[data-id="urn:li:activity:' + post["post_id"] + '"]'
+        await page.evaluate('''(post_selector) => {
+                document.querySelector(post_selector + ' .feed-shared-control-menu__trigger').click();
+            }''', post_selector)
 
-        await page.waitForSelector('.artdeco-dropdown__content-inner li')
+        await page.waitForSelector(post_selector + ' .artdeco-dropdown__content-inner li')
 
-        await page.evaluate('''() => {
-            document.querySelector('.artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
-        }''')
+        await page.evaluate('''(post_selector) => {
+                document.querySelector(post_selector + ' .artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
+            }''', post_selector)
 
         await page.waitForSelector('.artdeco-toast-item__message a')
 
         post['post_url'] = await page.evaluate('''() => {
-            return document.querySelector('.artdeco-toast-item__message a').href;
-        }''')
+                return document.querySelector('.artdeco-toast-item__message a').href;
+            }''')
 
         await page.evaluate('''() => {
-            document.querySelector('.artdeco-toast-item__dismiss').click();
-        }''')
+                document.querySelector('.artdeco-toast-item__dismiss').click();
+            }''')
 
     return posts
 
@@ -269,7 +279,8 @@ async def scrape_user_posts(page, url, days_ago):
 
     # Wait for posts to load
     await page.waitFor(2000)
-    await page.waitForSelector('div.scaffold-finite-scroll__content > ul > li,div.scaffold-finite-scroll__content > div > div')
+    await page.waitForSelector(
+        'div.scaffold-finite-scroll__content > ul > li,div.scaffold-finite-scroll__content > div > div')
 
     # Page down until no more posts are loaded
     while True:
