@@ -54,7 +54,8 @@ async def scrape_posts(page, url, days_ago, limit):
     :param limit: Maximum number of posts to scrape
     :return: List of posts
     """
-    await page.goto(url)
+    if page.url != url:
+        await page.goto(url)
 
     # Wait for posts to load
     await page.waitFor(2000)
@@ -166,8 +167,7 @@ async def scrape_posts(page, url, days_ago, limit):
     posts = posts[::-1]
 
     for post in posts:
-        post_selector = f'div[data-id="urn:li:activity:' + post["post_id"] + '"],div[data-urn="urn:li:activity:' + post[
-            "post_id"] + '"]'
+        post_selector = f'div[data-urn="urn:li:activity:' + post["post_id"] + '"]'
         await page.evaluate('''(post_selector) => {
                 document.querySelector(post_selector + ' .feed-shared-control-menu__trigger').click();
             }''', post_selector)
@@ -335,7 +335,7 @@ async def main():
     linkedin_password = args.password
 
     # Determine json filename to store posts
-    json_basefilepath = (url.split('/')[4].split('?')[0] if not args.json else args.json) + '_posts'
+    json_basefilepath = (url.split('/')[-1].split('?')[0] if not args.json else args.json) + '_posts'
     json_filepath = json_basefilepath
     if args.increment:
         json_filepath += f'_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}'
@@ -388,7 +388,7 @@ async def main():
             params['executablePath'] = chrome_path
         if profile_dir is not None and len(profile_dir) > 0:
             params['userDataDir'] = profile_dir
-        print("Launching browser with params: " + str(params))
+        print("Launching browser" + (" in headless mode" if args.headless else ""))
         browser = await pyppeteer.launch(params)
 
         # Set default timeout for the browser (in milliseconds)
@@ -418,24 +418,18 @@ async def main():
         print("Logging in to LinkedIn with username: " + linkedin_username + " and password: " + linkedin_password)
         await login_to_linkedin(page, linkedin_username, linkedin_password)
 
-        # if 'company' in url and 'employee-posts' not in url:
-        #     new_posts = await scrape_company_posts(page, url, days_ago)
-        # elif 'linkedin.com/feed' in url:
-        #     new_posts = await scrape_myfeed_posts(page, url, days_ago)
-        #     actor = await page.evaluate('''() => {
-        #         return document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4].split('?')[0];
-        #     }''')
-        #     json_filepath = json_filepath.replace('posts', 'feed')
-        #     if json_filepath.startswith('_feed'):
-        #         json_filepath = actor + json_filepath
-        # else:
-        #     new_posts = await scrape_company_posts(page, url, days_ago)
-        #     new_posts = await scrape_user_posts(page, url, days_ago)
-
-        limit = args.limit or None
+        limit = int(args.limit) or None
 
         print("Scraping posts from URL: " + url + " with days_ago: " + str(days_ago) + " and limit: " + str(limit))
         new_posts = await scrape_posts(page, url, days_ago, limit)
+
+        if 'linkedin.com/feed' in url:
+            actor = await page.evaluate('''() => {
+                return document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4].split('?')[0];
+            }''')
+            json_filepath = json_filepath.replace('posts', 'feed')
+            if json_filepath.startswith('_feed'):
+                json_filepath = actor + json_filepath
 
         # filter out any posts in new_posts that are older than last_post_date
         if last_post_timestamp:
