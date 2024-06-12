@@ -44,122 +44,41 @@ async def login_to_linkedin(page, username, password):
     await page.waitForNavigation({'timeout': 240000})
 
 
-async def scrape_company_posts(page, url, days_ago):
+async def scrape_posts(page, url, days_ago, limit):
     """
-    Scrape LinkedIn company posts
+    Scrape LinkedIn posts
 
     :param page: Pyppeteer page object
     :param url: LinkedIn company URL
     :param days_ago: How many days ago to scrape for posts
+    :param limit: Maximum number of posts to scrape
     :return: List of posts
     """
     await page.goto(url)
-
-    # Click to change sorting from Top to Recent
-    await page.waitForSelector('div.sort-dropdown__dropdown button.artdeco-dropdown__trigger')
-    await page.click('div.sort-dropdown__dropdown button.artdeco-dropdown__trigger')
-
-    await page.waitForSelector('div.sort-dropdown__dropdown div.artdeco-dropdown__content button.artdeco-button--muted')
-    await page.click('div.sort-dropdown__dropdown div.artdeco-dropdown__content button.artdeco-button--muted')
 
     # Wait for posts to load
     await page.waitFor(2000)
     await page.waitForSelector('.scaffold-finite-scroll__content > div')
 
-    # Page down until no more posts are loaded
-    while True:
-        num_posts = await page.evaluate('''() => {
-            return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length
-        }''')
+    # Click dropdown (if it exists) to change sorting from Top to Recent
+    dropdown_button_1 = await page.querySelector('div.sort-dropdown__dropdown button.artdeco-dropdown__trigger')
+    if dropdown_button_1:
+        await page.waitForSelector('div.sort-dropdown__dropdown button.artdeco-dropdown__trigger')
+        await page.click('div.sort-dropdown__dropdown button.artdeco-dropdown__trigger')
+        await page.waitForSelector(
+            'div.sort-dropdown__dropdown div.artdeco-dropdown__content button.artdeco-button--muted')
+        await page.click('div.sort-dropdown__dropdown div.artdeco-dropdown__content button.artdeco-button--muted')
+        await page.waitFor(2000)
+        await page.waitForSelector('.scaffold-finite-scroll__content > div')
 
-        await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
-
-        await page.waitFor(1000);
-
-        oldest_timestamp = await page.evaluate('''() => {
-            let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
-            let last_post = Array.from(posts).pop();
-            let post_id = last_post.dataset.urn.match(/([0-9]{19})/).pop();
-            return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
-        }''')
-        post_age = (pd.Timestamp.now() - pd.to_datetime(oldest_timestamp, unit='ms')).days
-        if -1 < days_ago < post_age:
-            break
-
-        try:
-            await page.waitForFunction('''(num_posts) => {
-                console.log('num_posts is ' + num_posts);
-                return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length > num_posts;
-            }''', {'timeout': 5000}, str(num_posts))
-        except PyppeteerTimeoutError:
-            break
-
-    # Extract posts
-    posts = await page.evaluate('''() => {
-        let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
-        
-        let results = [];
-        for (let post of posts) {
-            let post_id = post.dataset.urn.match(/([0-9]{19})/)
-            post_id = post_id ? post_id.pop() : null;
-            if (!post_id) continue;
-            let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
-            let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
-            let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
-            let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
-            let text = textElement ? textElement.innerText : '';
-            let is_repost = !!post.querySelector('.update-components-mini-update-v2');
-            let repost_id = null;
-            let repost_timestamp = null;
-            let repost_actor_name = null;
-            let repost_degree = null;
-            let repost_text = null;
-            if (is_repost) {
-                let repost = post.querySelector('.update-components-mini-update-v2');
-                repost_id = repost.querySelector('a.update-components-mini-update-v2__link-to-details-page').href.match(/([0-9]{19})/).pop();
-                repost_timestamp = parseInt(BigInt(repost_id).toString(2).slice(0, 41), 2);
-                repost_actor_name = repost.querySelector('.update-components-actor__name').innerText;
-                let degree_element = repost.querySelector('.update-components-actor__supplementary-actor-info > span');
-                repost_degree = degree_element ? degree_element.innerText : '';
-                let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
-                repost_text = commentary_element ? commentary_element.innerText : '';
-            }
-            
-            let post_url = ''
-            
-            results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
-                          repost_degree, repost_text, post_url});
-        }
-        
-        return results;
-    }''')
-
-    posts = posts[::-1]
-
-    return posts
-
-
-async def scrape_myfeed_posts(page, url, days_ago):
-    """
-    Scrape my LinkedIn posts
-
-    :param page: Pyppeteer page object
-    :param url: LinkedIn company URL
-    :param days_ago: How many days ago to scrape for posts
-    :return: List of posts
-    """
-    await page.goto(url)
-
-    # Click to change sorting from Top to Recent
-    await page.waitForSelector('.scaffold-layout__main button.artdeco-dropdown__trigger')
-    await page.click('.scaffold-layout__main button.artdeco-dropdown__trigger')
-
-    await page.waitForSelector('.artdeco-dropdown--is-open li:nth-child(2)')
-    await page.click('.artdeco-dropdown--is-open li:nth-child(2)')
-
-    # Wait for posts to load
-    await page.waitFor(2000)
-    await page.waitForSelector('.scaffold-finite-scroll__content > div')
+    dropdown_button_2 = await page.querySelector('.scaffold-layout__main button.artdeco-dropdown__trigger')
+    if dropdown_button_2:
+        await page.waitForSelector('.scaffold-layout__main button.artdeco-dropdown__trigger')
+        await page.click('.scaffold-layout__main button.artdeco-dropdown__trigger')
+        await page.waitForSelector('.artdeco-dropdown--is-open li:nth-child(2)')
+        await page.click('.artdeco-dropdown--is-open li:nth-child(2)')
+        await page.waitFor(2000)
+        await page.waitForSelector('.scaffold-finite-scroll__content > div')
 
     # Page down until no more posts are loaded
     while True:
@@ -187,7 +106,10 @@ async def scrape_myfeed_posts(page, url, days_ago):
             return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
         }''')
         post_age = (pd.Timestamp.now() - pd.to_datetime(oldest_timestamp, unit='ms')).days
+
         if -1 < days_ago < post_age:
+            break
+        if limit and num_posts >= limit:
             break
 
         try:
@@ -200,7 +122,6 @@ async def scrape_myfeed_posts(page, url, days_ago):
 
     # Extract posts
     posts = await page.evaluate('''() => {
-        //let actor = document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4];
         let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
         
         let results = [];
@@ -208,116 +129,6 @@ async def scrape_myfeed_posts(page, url, days_ago):
             let post_id = post.dataset.urn.match(/([0-9]{19})/)
             post_id = post_id ? post_id.pop() : null;
             if (!post_id) continue;
-            let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
-            let actor_title = post.querySelector('.update-components-actor__name span span') ? post.querySelector('.update-components-actor__name span span').textContent.trim() : '';
-            let actor_description = post.querySelector('.update-components-actor__description span') ? post.querySelector('.update-components-actor__description span').textContent.trim() : '';
-            let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
-            let text = textElement ? textElement.innerText : '';
-            let is_repost = !!post.querySelector('.update-components-mini-update-v2');
-            let repost_id = null;
-            let repost_timestamp = null;
-            let repost_actor_name = null;
-            let repost_degree = null;
-            let repost_text = null;
-            if (is_repost) {
-                let repost = post.querySelector('.update-components-mini-update-v2');
-                repost_id = repost.querySelector('a.update-components-mini-update-v2__link-to-details-page').href.match(/([0-9]{19})/).pop();
-                repost_timestamp = parseInt(BigInt(repost_id).toString(2).slice(0, 41), 2);
-                repost_actor_name = repost.querySelector('.update-components-actor__name').innerText;
-                let degree_element = repost.querySelector('.update-components-actor__supplementary-actor-info > span');
-                repost_degree = degree_element ? degree_element.innerText : '';
-                let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
-                repost_text = commentary_element ? commentary_element.innerText : '';
-            }
-            
-            let post_url = ''
-             
-            results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
-                          repost_degree, repost_text, post_url});
-        }
-        
-        return results;
-    }''')
-
-    posts = posts[::-1]
-
-    for post in posts:
-        post_selector = f'div[data-id="urn:li:activity:' + post["post_id"] + '"]'
-        await page.evaluate('''(post_selector) => {
-                document.querySelector(post_selector + ' .feed-shared-control-menu__trigger').click();
-            }''', post_selector)
-
-        await page.waitForSelector(post_selector + ' .artdeco-dropdown__content-inner li')
-
-        await page.evaluate('''(post_selector) => {
-                document.querySelector(post_selector + ' .artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
-            }''', post_selector)
-
-        await page.waitForSelector('.artdeco-toast-item__message a')
-
-        post['post_url'] = await page.evaluate('''() => {
-                return document.querySelector('.artdeco-toast-item__message a').href;
-            }''')
-
-        await page.evaluate('''() => {
-                document.querySelector('.artdeco-toast-item__dismiss').click();
-            }''')
-
-    return posts
-
-
-async def scrape_user_posts(page, url, days_ago):
-    """
-    Scrape LinkedIn user posts
-
-    :param page: Pyppeteer page object
-    :param url: LinkedIn user URL
-    :param days_ago: How many days ago to scrape for posts
-    :return: List of posts
-    """
-    await page.goto(url)
-
-    # Wait for posts to load
-    await page.waitFor(2000)
-    await page.waitForSelector(
-        'div.scaffold-finite-scroll__content > ul > li,div.scaffold-finite-scroll__content > div > div')
-
-    # Page down until no more posts are loaded
-    while True:
-        num_posts = await page.evaluate('''() => {
-            return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length
-        }''')
-
-        await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
-
-        await page.waitFor(1000);
-
-        oldest_timestamp = await page.evaluate('''() => {
-            let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
-            let last_post = Array.from(posts).pop();
-            let post_id = last_post.dataset.urn.match(/([0-9]{19})/).pop();
-            return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
-        }''')
-        post_age = (pd.Timestamp.now() - pd.to_datetime(oldest_timestamp, unit='ms')).days
-        if -1 < days_ago < post_age:
-            break
-
-        try:
-            await page.waitForFunction('''(num_posts) => {
-                console.log('num_posts is ' + num_posts);
-                return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length > num_posts;
-            }''', {'timeout': 5000}, str(num_posts))
-        except PyppeteerTimeoutError:
-            break
-
-    # Extract posts
-    posts = await page.evaluate('''() => {
-        //let actor = document.querySelector('.scaffold-layout__sidebar div:nth-child(3) a').href.split('/')[4];
-        let posts = document.querySelectorAll('div.scaffold-finite-scroll__content > ul > li .feed-shared-update-v2');
-
-        let results = [];
-        for (let post of posts) {
-            let post_id = post.dataset.urn.match(/([0-9]{19})/).pop();
             let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
             let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
             let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
@@ -343,16 +154,39 @@ async def scrape_user_posts(page, url, days_ago):
                 }
             }
             
-            let post_url = '';
+            let post_url = ''
             
-            results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, repost_timestamp, repost_actor_name, 
-                          repost_degree, repost_text, post_url});
+            results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, 
+                          repost_timestamp, repost_actor_name, repost_degree, repost_text, post_url});
         }
         
         return results;
     }''')
 
     posts = posts[::-1]
+
+    for post in posts:
+        post_selector = f'div[data-id="urn:li:activity:' + post["post_id"] + '"],div[data-urn="urn:li:activity:' + post[
+            "post_id"] + '"]'
+        await page.evaluate('''(post_selector) => {
+                document.querySelector(post_selector + ' .feed-shared-control-menu__trigger').click();
+            }''', post_selector)
+
+        await page.waitForSelector(post_selector + ' .artdeco-dropdown__content-inner li')
+
+        await page.evaluate('''(post_selector) => {
+                document.querySelector(post_selector + ' .artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
+            }''', post_selector)
+
+        await page.waitForSelector('.artdeco-toast-item__message a')
+
+        post['post_url'] = await page.evaluate('''() => {
+                return document.querySelector('.artdeco-toast-item__message a').href;
+            }''')
+
+        await page.evaluate('''() => {
+                document.querySelector('.artdeco-toast-item__dismiss').click();
+            }''')
 
     return posts
 
@@ -489,9 +323,13 @@ async def main():
     parser.add_argument('--username', help="The LinkedIn username", default=linkedin_username)
     parser.add_argument('--password', help="The LinkedIn password", default=linkedin_password)
     parser.add_argument('--profile', help="The browser profile directory")
+    parser.add_argument('--limit', help="Limit to this number of posts")
+    parser.add_argument('--headless', help="Don't show the chrome browser while it's running", default=False)
     args = parser.parse_args()
 
     url = args.url or None
+
+    print(f"Going to scrape URL: " + url)
 
     linkedin_username = args.username
     linkedin_password = args.password
@@ -503,16 +341,20 @@ async def main():
         json_filepath += f'_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}'
     json_filepath += '.json'
 
+    print(f"Saving posts to: " + json_filepath)
+
     # Load any existing posts from file if we're not doing an incremental update
     posts = []
     if not args.increment:
         if os.path.isfile(json_filepath):
             with open(json_filepath, 'r') as file:
+                print(f"Loading existing posts from: " + json_filepath)
                 posts = json.load(file)
 
     days_ago = args.start
 
     # Scrape posts
+    print(f"Scraping posts")
     new_posts = []
     if url:
         last_post_timestamp = None
@@ -533,18 +375,20 @@ async def main():
         # if we found a last_post_date, convert timestamp to days ago and use it
         if last_post_timestamp:
             days_ago = (pd.Timestamp.now() - pd.to_datetime(last_post_timestamp, unit='ms')).days
+            print(f"Last post timestamp: {last_post_timestamp}, days ago: {days_ago}")
 
         if args.profile is not None:
             profile_dir = args.profile
 
         params = {
-            'headless': False,
+            'headless': args.headless,
             'timeout': 120000,
         }
         if chrome_path is not None and len(chrome_path) > 0:
             params['executablePath'] = chrome_path
         if profile_dir is not None and len(profile_dir) > 0:
             params['userDataDir'] = profile_dir
+        print("Launching browser with params: " + str(params))
         browser = await pyppeteer.launch(params)
 
         # Set default timeout for the browser (in milliseconds)
@@ -570,38 +414,53 @@ async def main():
             }
         }''')
         await page.setViewport(viewport)
+
+        print("Logging in to LinkedIn with username: " + linkedin_username + " and password: " + linkedin_password)
         await login_to_linkedin(page, linkedin_username, linkedin_password)
 
-        if 'company' in url and 'employee-posts' not in url:
-            new_posts = await scrape_company_posts(page, url, days_ago)
-        elif 'linkedin.com/feed' in url:
-            new_posts = await scrape_myfeed_posts(page, url, days_ago)
-            actor = await page.evaluate('''() => {
-                return document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4].split('?')[0];
-            }''')
-            json_filepath = json_filepath.replace('posts', 'feed')
-            if json_filepath.startswith('_feed'):
-                json_filepath = actor + json_filepath
-        else:
-            new_posts = await scrape_user_posts(page, url, days_ago)
+        # if 'company' in url and 'employee-posts' not in url:
+        #     new_posts = await scrape_company_posts(page, url, days_ago)
+        # elif 'linkedin.com/feed' in url:
+        #     new_posts = await scrape_myfeed_posts(page, url, days_ago)
+        #     actor = await page.evaluate('''() => {
+        #         return document.querySelector('.feed-identity-module__actor-meta a').href.split('/')[4].split('?')[0];
+        #     }''')
+        #     json_filepath = json_filepath.replace('posts', 'feed')
+        #     if json_filepath.startswith('_feed'):
+        #         json_filepath = actor + json_filepath
+        # else:
+        #     new_posts = await scrape_company_posts(page, url, days_ago)
+        #     new_posts = await scrape_user_posts(page, url, days_ago)
+
+        limit = args.limit or None
+
+        print("Scraping posts from URL: " + url + " with days_ago: " + str(days_ago) + " and limit: " + str(limit))
+        new_posts = await scrape_posts(page, url, days_ago, limit)
 
         # filter out any posts in new_posts that are older than last_post_date
         if last_post_timestamp:
+            print(f"Filtering out posts older than {last_post_timestamp}")
             new_posts = [post for post in new_posts if post['timestamp'] > last_post_timestamp]
 
+        print(f"Scraped {len(new_posts)} new posts")
+
+        print("Closing browser")
         await browser.close()
 
     # Merge new posts with existing posts and remove duplicates then save output
     if len(new_posts) > 0:
+        print("Merging new posts with existing posts")
         if len(posts) > 0:
             old_post_ids = [post['post_id'] for post in posts]
             new_posts = [post for post in new_posts if post['post_id'] not in old_post_ids]
         posts += new_posts
 
+        print(f"Saving posts to: " + json_filepath)
         await save_posts_to_json(json_filepath, posts)
 
     # Export posts to Excel
     if args.excel:
+        print("Exporting posts to Excel")
         df = pd.DataFrame(posts,
                           columns=['post_id', 'actor_title', 'actor_description', 'timestamp', 'text', 'is_repost',
                                    'repost_id', 'repost_timestamp', 'repost_actor_name', 'repost_degree',
@@ -612,6 +471,7 @@ async def main():
 
     # Upload to OpenAI vector store
     if args.openai:
+        print("Uploading posts to OpenAI vector store")
         if args.store:
             vector_store_name = args.store
         vector_store_id = check_and_create_vector_store(vector_store_name)
