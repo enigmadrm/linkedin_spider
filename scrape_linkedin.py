@@ -466,9 +466,13 @@ async def main():
     # Upload to OpenAI vector store
     if args.openai:
         print("Uploading posts to OpenAI vector store")
-        if args.store:
+        if args.store and not args.store.startswith('vs_'):
             vector_store_name = args.store
-        vector_store_id = check_and_create_vector_store(vector_store_name)
+            vector_store_id = check_and_create_vector_store(vector_store_name)
+        elif args.store:
+            vector_store_id = args.store
+        else:
+            vector_store_id = check_and_create_vector_store('default')
         upload_to_vector_store(vector_store_id, json_filepath)
 
 
