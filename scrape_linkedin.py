@@ -194,7 +194,7 @@ async def scrape_posts(page, url, days_ago, limit):
         current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
         print(f"New scroll height is {current_scroll_height}")
 
-        await page.waitFor(3000)
+        await page.waitFor(5000)
 
         current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
         print(f"5 sec later, new scroll height is {current_scroll_height}")
