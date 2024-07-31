@@ -7,6 +7,6 @@ if exist .venv\Scripts\activate.bat (
 python scrape_linkedin.py ^
  --profile="%CD%\\profiles\\rebekah" ^
  --openai ^
- --url="https://www.linkedin.com/company/heynota/posts/?feedView=all" ^
- --json="nota/nota" ^
- --store="vs_zpVIl8WJPL7RwuNeyGOjVmAt"
+ --url="https://www.linkedin.com/in/chriswargo/recent-activity/all/" ^
+ --json="fastener/chris-wargo" ^
+ --store="vs_GbjaYs1jGl98CoGckYSyQlcH"

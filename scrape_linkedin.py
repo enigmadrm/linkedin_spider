@@ -1,6 +1,8 @@
 # import aiofiles
 import argparse
 import asyncio
+import re
+import time
 
 import aiofiles
 from dotenv import load_dotenv
@@ -81,25 +83,121 @@ async def scrape_posts(page, url, days_ago, limit):
         await page.waitFor(2000)
         await page.waitForSelector('.scaffold-finite-scroll__content > div')
 
+    posts = []
+
     # Page down until no more posts are loaded
+    num_posts = 0
     while True:
-        num_posts = await page.evaluate('''() => {
-            return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length
-        }''')
+        post_elements = await page.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2')
+        print(f"Total number of posts on the page: {len(post_elements)}")
 
+        if len(post_elements) == num_posts:
+            print("No more posts loaded")
+            break
+
+        # Extract and structure the scraped data
+        for post in post_elements[num_posts:]:
+            # # scroll to this element on the page
+            # element_position = await page.evaluate('''(element) => {
+            #     const rect = element.getBoundingClientRect();
+            #     return {
+            #         x: rect.x,
+            #         y: rect.y,
+            #     };
+            # }''', post)
+            #
+            # await page.evaluate('''(element) => {
+            #     window.scrollTo(element.x, element.y);
+            # }''', element_position)
+
+            post_id = await page.evaluate('(element) => element.getAttribute("data-urn")', post)
+            post_id = re.search(r"([0-9]{19})", post_id).group(0)
+
+            timestamp = await page.evaluate('''(post_id) => {
+                return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
+            }''', post_id)
+
+            actor_title = await post.querySelectorEval('.update-components-actor__name span span',
+                                                       'elm => elm.textContent.trim()')
+            actor_description = await post.querySelectorEval('.update-components-actor__description span',
+                                                             'elm => elm.textContent.trim()')
+
+            text = await post.querySelectorEval('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]',
+                                                'elm => elm ? elm.innerText : ""')
+
+            is_repost = True if await post.querySelector('.update-components-mini-update-v2') else False
+
+            repost_id = repost_timestamp = repost_actor_name = repost_degree = repost_text = None
+
+            if is_repost:
+                repost = await post.querySelector('.update-components-mini-update-v2')
+                repost_link = await repost.querySelectorEval('a.update-components-mini-update-v2__link-to-details-page',
+                                                             'elm => elm ? elm.href.match(/([0-9]{19})/)[0] : null')
+                if repost_link:
+                    repost_timestamp = await page.evaluate('''(post_id) => {
+                                return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
+                            }''', repost_link)
+
+                    if await repost.querySelector('.update-components-actor__name'):
+                        repost_actor_name = await repost.querySelectorEval('.update-components-actor__name',
+                                                                           'elm => elm.textContent.trim()')
+
+                    if await repost.querySelector('.update-components-actor__supplementary-actor-info > span'):
+                        repost_degree = await repost.querySelectorEval(
+                            '.update-components-actor__supplementary-actor-info > span',
+                            'elm => elm ? elm.textContent.trim() : ""')
+
+                    if await repost.querySelector('.update-components-update-v2__commentary'):
+                        repost_text = await repost.querySelectorEval('.update-components-update-v2__commentary',
+                                                                     'elm => elm ? elm.textContent.trim() : ""')
+
+            post_url = ''
+
+            posts.append({
+                'post_id': post_id,
+                'actor_title': actor_title,
+                'actor_description': actor_description,
+                'timestamp': timestamp,
+                'text': text,
+                'is_repost': is_repost,
+                'repost_id': repost_id,
+                'repost_timestamp': repost_timestamp,
+                'repost_actor_name': repost_actor_name,
+                'repost_degree': repost_degree,
+                'repost_text': repost_text,
+                'post_url': post_url
+            })
+
+        print("Number of posts scraped so far: ", len(posts))
+
+        # keep track of how many posts were found during this loop iteration
+        num_posts = len(post_elements)
+
+        # scroll down to the obttom to trigger another page of posts to load
         initial_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
+        #print(f"Current scroll height is {initial_scroll_height}")
 
+        print("Scrolling to load more posts...")
         await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
 
         try:
             await page.waitForFunction(
                 '''initialScrollHeight => document.body.scrollHeight > initialScrollHeight''',
-                {'timeout': 10000},
+                {'timeout': 30000},
                 initial_scroll_height
             )
         except TimeoutError:
             pass
 
+        current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
+        #print(f"New scroll height is {current_scroll_height}")
+
+        if current_scroll_height < initial_scroll_height:
+            print("Something weird happened, the page got shorter! Observe what went wrong")
+            await page.screenshot({'path': 'error.png'})
+            await asyncio.sleep(60)
+
+        # if we have scraped the desired number of posts, break out of the loop
         oldest_timestamp = await page.evaluate('''() => {
             let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
             let last_post = Array.from(posts).pop();
@@ -109,84 +207,18 @@ async def scrape_posts(page, url, days_ago, limit):
         post_age = (pd.Timestamp.now() - pd.to_datetime(oldest_timestamp, unit='ms')).days
 
         if -1 < days_ago < post_age:
-            break
-        if limit and num_posts >= limit:
-            break
-
-        try:
-            await page.waitForFunction('''(num_posts) => {
-                console.log('num_posts is ' + num_posts);
-                return document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2').length > num_posts;
-            }''', {'timeout': 5000}, str(num_posts))
-        except PyppeteerTimeoutError:
+            print(f"We reached a point on the page where we are seeing posts older ({post_age} days) than the ones we have scraped in the past ({days_ago} days), stopping")
             break
 
-    # Extract posts
-    posts = await page.evaluate('''() => {
-        let posts = document.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2');
-        
-        let results = [];
-        for (let post of posts) {
-            let post_id = post.dataset.urn.match(/([0-9]{19})/)
-            post_id = post_id ? post_id.pop() : null;
-            if (!post_id) continue;
-            let timestamp = parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
-            let actor_title = post.querySelector('.update-components-actor__name span span').textContent.trim();
-            let actor_description = post.querySelector('.update-components-actor__description span').textContent.trim();
-            let textElement = post.querySelector('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]');
-            let text = textElement ? textElement.innerText : '';
-            let is_repost = !!post.querySelector('.update-components-mini-update-v2');
-            let repost_id = null;
-            let repost_timestamp = null;
-            let repost_actor_name = null;
-            let repost_degree = null;
-            let repost_text = null;
-            if (is_repost) {
-                let repost = post.querySelector('.update-components-mini-update-v2');
-                let repost_link = repost.querySelector('a.update-components-mini-update-v2__link-to-details-page');
-                repost_id = repost_link ? repost.querySelector('a.update-components-mini-update-v2__link-to-details-page').href.match(/([0-9]{19})/).pop() : null;
-                if (repost_id) {
-                    repost_timestamp = parseInt(BigInt(repost_id).toString(2).slice(0, 41), 2);
-                    repost_actor_name = repost.querySelector('.update-components-actor__name').innerText;
-                    let degree_element = repost.querySelector('.update-components-actor__supplementary-actor-info > span');
-                    repost_degree = degree_element ? degree_element.innerText : '';
-                    let commentary_element = repost.querySelector('.update-components-update-v2__commentary');
-                    repost_text = commentary_element ? commentary_element.innerText : '';
-                }
-            }
-            
-            let post_url = ''
-            
-            results.push({post_id, actor_title, actor_description, timestamp, text, is_repost, repost_id, 
-                          repost_timestamp, repost_actor_name, repost_degree, repost_text, post_url});
-        }
-        
-        return results;
-    }''')
+        if limit and len(posts) >= limit:
+            print("Reached the limit of posts to scrape: ", len(posts))
+            break
 
+    # Reverse the order of the posts so that the most recent posts are first
+    print(f"Reverse sorting the posts")
     posts = posts[::-1]
 
-    # for post in posts:
-    #     post_selector = f'div[data-urn="urn:li:activity:' + post["post_id"] + '"]'
-    #     await page.evaluate('''(post_selector) => {
-    #             document.querySelector(post_selector + ' .feed-shared-control-menu__trigger').click();
-    #         }''', post_selector)
-    #
-    #     await page.waitForSelector(post_selector + ' .artdeco-dropdown__content-inner li')
-    #
-    #     await page.evaluate('''(post_selector) => {
-    #             document.querySelector(post_selector + ' .artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
-    #         }''', post_selector)
-    #
-    #     await page.waitForSelector('.artdeco-toast-item__message a')
-    #
-    #     post['post_url'] = await page.evaluate('''() => {
-    #             return document.querySelector('.artdeco-toast-item__message a').href;
-    #         }''')
-    #
-    #     await page.evaluate('''() => {
-    #             document.querySelector('.artdeco-toast-item__dismiss').click();
-    #         }''')
+    print(f"Scraped a total of {len(posts)} posts")
 
     return posts
 
@@ -336,13 +368,14 @@ async def main():
 
     # Determine json filename to store posts
     json_basefilepath = (url.split('/')[-1].split('?')[0] if not args.json else args.json) + '_posts'
+    json_basefile = json_basefilepath.split('/')[-1] if '/' in json_basefilepath else json_basefilepath
     json_filepath = json_basefilepath
     if args.increment:
         json_filepath += f'_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}'
     json_filepath += '.json'
 
-    # determine the json dir from json_filepath
-    json_dir = os.path.dirname(json_filepath)
+    # Determine json directory
+    json_dir = json_filepath.split('/')[0] if '/' in json_filepath else '.'
 
     # create json_dir if it doesn't exist
     if not os.path.exists(json_dir):
@@ -371,8 +404,9 @@ async def main():
         else:
             # find the most recent post from the json files in the current directory
             for file in os.listdir(json_dir):
-                if file.endswith('.json') and file.startswith(json_basefilepath):
-                    with open(file, 'r') as f:
+                fullfile = json_dir + '/' + file
+                if fullfile.endswith('.json') and fullfile.startswith(json_basefilepath):
+                    with open(fullfile, 'r') as f:
                         json_posts = json.load(f)
                         post_timestamp = json_posts[-1]['timestamp']
                         if not last_post_timestamp:
@@ -460,26 +494,29 @@ async def main():
         print(f"Saving posts to: " + json_filepath)
         await save_posts_to_json(json_filepath, posts)
 
-    # Export posts to Excel
-    if args.excel:
-        print("Exporting posts to Excel")
-        df = pd.DataFrame(posts)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df['repost_timestamp'] = pd.to_datetime(df['repost_timestamp'], unit='ms')
-        df.to_excel(json_filepath.replace('.json', '.xlsx'), index=False)
+        # Export posts to Excel
+        if args.excel:
+            print("Exporting posts to Excel")
+            df = pd.DataFrame(posts, columns=['post_id', 'actor_title', 'actor_description', 'timestamp', 'text',
+                                              'is_repost', 'repost_id', 'repost_timestamp', 'repost_actor_name',
+                                              'repost_degree', 'repost_text', 'post_url'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df['repost_timestamp'] = pd.to_datetime(df['repost_timestamp'], unit='ms')
+            df.to_excel(json_filepath.replace('.json', '.xlsx'), index=False)
 
-    # Upload to OpenAI vector store
-    if args.openai:
-        print("Uploading posts to OpenAI vector store")
-        if args.store and not args.store.startswith('vs_'):
-            vector_store_name = args.store
-            vector_store_id = check_and_create_vector_store(vector_store_name)
-        elif args.store:
-            vector_store_id = args.store
-        else:
-            vector_store_id = check_and_create_vector_store('default')
-        upload_to_vector_store(vector_store_id, json_filepath)
-
+        # Upload to OpenAI vector store
+        if args.openai:
+            print("Uploading posts to OpenAI vector store")
+            if args.store and not args.store.startswith('vs_'):
+                vector_store_name = args.store
+                vector_store_id = check_and_create_vector_store(vector_store_name)
+            elif args.store:
+                vector_store_id = args.store
+            else:
+                vector_store_id = check_and_create_vector_store('default')
+            upload_to_vector_store(vector_store_id, json_filepath)
+    else:
+        print("No new posts were scraped since the last run, exiting...")
 
 if __name__ == "__main__":
     asyncio.get_event_loop().run_until_complete(main())
