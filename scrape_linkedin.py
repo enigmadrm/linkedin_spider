@@ -166,27 +166,27 @@ async def scrape_posts(page, url, days_ago, limit):
 
     posts = posts[::-1]
 
-    for post in posts:
-        post_selector = f'div[data-urn="urn:li:activity:' + post["post_id"] + '"]'
-        await page.evaluate('''(post_selector) => {
-                document.querySelector(post_selector + ' .feed-shared-control-menu__trigger').click();
-            }''', post_selector)
-
-        await page.waitForSelector(post_selector + ' .artdeco-dropdown__content-inner li')
-
-        await page.evaluate('''(post_selector) => {
-                document.querySelector(post_selector + ' .artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
-            }''', post_selector)
-
-        await page.waitForSelector('.artdeco-toast-item__message a')
-
-        post['post_url'] = await page.evaluate('''() => {
-                return document.querySelector('.artdeco-toast-item__message a').href;
-            }''')
-
-        await page.evaluate('''() => {
-                document.querySelector('.artdeco-toast-item__dismiss').click();
-            }''')
+    # for post in posts:
+    #     post_selector = f'div[data-urn="urn:li:activity:' + post["post_id"] + '"]'
+    #     await page.evaluate('''(post_selector) => {
+    #             document.querySelector(post_selector + ' .feed-shared-control-menu__trigger').click();
+    #         }''', post_selector)
+    #
+    #     await page.waitForSelector(post_selector + ' .artdeco-dropdown__content-inner li')
+    #
+    #     await page.evaluate('''(post_selector) => {
+    #             document.querySelector(post_selector + ' .artdeco-dropdown__content-inner li:nth-child(2) .feed-shared-control-menu__dropdown-item').click();
+    #         }''', post_selector)
+    #
+    #     await page.waitForSelector('.artdeco-toast-item__message a')
+    #
+    #     post['post_url'] = await page.evaluate('''() => {
+    #             return document.querySelector('.artdeco-toast-item__message a').href;
+    #         }''')
+    #
+    #     await page.evaluate('''() => {
+    #             document.querySelector('.artdeco-toast-item__dismiss').click();
+    #         }''')
 
     return posts
 
@@ -341,6 +341,14 @@ async def main():
         json_filepath += f'_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}'
     json_filepath += '.json'
 
+    # determine the json dir from json_filepath
+    json_dir = os.path.dirname(json_filepath)
+
+    # create json_dir if it doesn't exist
+    if not os.path.exists(json_dir):
+        print(f"Creating JSON file directory: " + json_dir)
+        os.makedirs(json_dir)
+
     print(f"Saving posts to: " + json_filepath)
 
     # Load any existing posts from file if we're not doing an incremental update
@@ -362,7 +370,7 @@ async def main():
             last_post_timestamp = posts[-1]['timestamp']
         else:
             # find the most recent post from the json files in the current directory
-            for file in os.listdir('.'):
+            for file in os.listdir(json_dir):
                 if file.endswith('.json') and file.startswith(json_basefilepath):
                     with open(file, 'r') as f:
                         json_posts = json.load(f)
@@ -418,7 +426,7 @@ async def main():
         print("Logging in to LinkedIn with username: " + linkedin_username + " and password: " + linkedin_password)
         await login_to_linkedin(page, linkedin_username, linkedin_password)
 
-        limit = int(args.limit) or None
+        limit = int(args.limit) if args.limit else 0
 
         print("Scraping posts from URL: " + url + " with days_ago: " + str(days_ago) + " and limit: " + str(limit))
         new_posts = await scrape_posts(page, url, days_ago, limit)
@@ -455,10 +463,7 @@ async def main():
     # Export posts to Excel
     if args.excel:
         print("Exporting posts to Excel")
-        df = pd.DataFrame(posts,
-                          columns=['post_id', 'actor_title', 'actor_description', 'timestamp', 'text', 'is_repost',
-                                   'repost_id', 'repost_timestamp', 'repost_actor_name', 'repost_degree',
-                                   'repost_text', 'post_url'])
+        df = pd.DataFrame(posts)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df['repost_timestamp'] = pd.to_datetime(df['repost_timestamp'], unit='ms')
         df.to_excel(json_filepath.replace('.json', '.xlsx'), index=False)
