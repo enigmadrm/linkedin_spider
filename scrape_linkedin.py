@@ -97,18 +97,20 @@ async def scrape_posts(page, url, days_ago, limit):
 
         # Extract and structure the scraped data
         for post in post_elements[num_posts:]:
-            # # scroll to this element on the page
-            # element_position = await page.evaluate('''(element) => {
-            #     const rect = element.getBoundingClientRect();
-            #     return {
-            #         x: rect.x,
-            #         y: rect.y,
-            #     };
-            # }''', post)
-            #
-            # await page.evaluate('''(element) => {
-            #     window.scrollTo(element.x, element.y);
-            # }''', element_position)
+            # scroll to this element on the page
+            element_position = await page.evaluate('''(element) => {
+                const rect = element.getBoundingClientRect();
+                return {
+                    x: rect.x,
+                    y: rect.y,
+                };
+            }''', post)
+
+            await page.evaluate('''(element) => {
+                window.scrollTo(element.x, element.y);
+            }''', element_position)
+
+            await page.waitFor(1000)
 
             post_id = await page.evaluate('(element) => element.getAttribute("data-urn")', post)
             post_id = re.search(r"([0-9]{19})", post_id).group(0)
@@ -175,7 +177,7 @@ async def scrape_posts(page, url, days_ago, limit):
 
         # scroll down to the obttom to trigger another page of posts to load
         initial_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
-        #print(f"Current scroll height is {initial_scroll_height}")
+        print(f"Current scroll height is {initial_scroll_height}")
 
         print("Scrolling to load more posts...")
         await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
@@ -183,19 +185,19 @@ async def scrape_posts(page, url, days_ago, limit):
         try:
             await page.waitForFunction(
                 '''initialScrollHeight => document.body.scrollHeight > initialScrollHeight''',
-                {'timeout': 30000},
+                {'timeout': 15000},
                 initial_scroll_height
             )
         except TimeoutError:
             pass
 
         current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
-        #print(f"New scroll height is {current_scroll_height}")
+        print(f"New scroll height is {current_scroll_height}")
 
-        if current_scroll_height < initial_scroll_height:
-            print("Something weird happened, the page got shorter! Observe what went wrong")
-            await page.screenshot({'path': 'error.png'})
-            await asyncio.sleep(60)
+        await page.waitFor(3000)
+
+        current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
+        print(f"5 sec later, new scroll height is {current_scroll_height}")
 
         # if we have scraped the desired number of posts, break out of the loop
         oldest_timestamp = await page.evaluate('''() => {
