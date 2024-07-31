@@ -88,7 +88,7 @@ async def scrape_posts(page, url, days_ago, limit):
     # Page down until no more posts are loaded
     num_posts = 0
     while True:
-        post_elements = await page.querySelectorAll('.scaffold-finite-scroll__content .feed-shared-update-v2')
+        post_elements = await page.querySelectorAll('li.profile-creator-shared-feed-update__container')
         print(f"Total number of posts on the page: {len(post_elements)}")
 
         if len(post_elements) == num_posts:
@@ -96,23 +96,18 @@ async def scrape_posts(page, url, days_ago, limit):
             break
 
         # Extract and structure the scraped data
-        for post in post_elements[num_posts:]:
+        for idx, post in enumerate(post_elements[num_posts:], start=num_posts):
             # scroll to this element on the page
-            element_position = await page.evaluate('''(element) => {
-                const rect = element.getBoundingClientRect();
-                return {
-                    x: rect.x,
-                    y: rect.y,
-                };
+            await page.evaluate('''(element) => {
+                element.scrollIntoView({behavior: 'instant', block: 'start', inline: 'end'});
             }''', post)
 
-            await page.evaluate('''(element) => {
-                window.scrollTo(element.x, element.y);
-            }''', element_position)
+            elm_num = idx + 1
+            post_selector = f'li.profile-creator-shared-feed-update__container:nth-child({elm_num}) .feed-shared-update-v2'
+            await page.waitForSelector(post_selector, {'timeout': 10000})
 
-            await page.waitFor(1000)
-
-            post_id = await page.evaluate('(element) => element.getAttribute("data-urn")', post)
+            post_id = await post.querySelectorEval('.feed-shared-update-v2',
+                                                   'element => element.getAttribute("data-urn")')
             post_id = re.search(r"([0-9]{19})", post_id).group(0)
 
             timestamp = await page.evaluate('''(post_id) => {
@@ -132,28 +127,38 @@ async def scrape_posts(page, url, days_ago, limit):
             repost_id = repost_timestamp = repost_actor_name = repost_degree = repost_text = None
 
             if is_repost:
-                repost = await post.querySelector('.update-components-mini-update-v2')
-                repost_link = await repost.querySelectorEval('a.update-components-mini-update-v2__link-to-details-page',
-                                                             'elm => elm ? elm.href.match(/([0-9]{19})/)[0] : null')
-                if repost_link:
-                    repost_timestamp = await page.evaluate('''(post_id) => {
-                                return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
-                            }''', repost_link)
+                try:
+                    repost = await post.querySelector('.update-components-mini-update-v2')
 
-                    if await repost.querySelector('.update-components-actor__name'):
-                        repost_actor_name = await repost.querySelectorEval('.update-components-actor__name',
-                                                                           'elm => elm.textContent.trim()')
+                    repost_selector = post_selector + ' a.update-components-mini-update-v2__link-to-details-page'
+                    await page.waitForSelector(repost_selector, {'timeout': 10000})
 
-                    if await repost.querySelector('.update-components-actor__supplementary-actor-info > span'):
-                        repost_degree = await repost.querySelectorEval(
-                            '.update-components-actor__supplementary-actor-info > span',
-                            'elm => elm ? elm.textContent.trim() : ""')
+                    repost_link = await repost.querySelectorEval('a.update-components-mini-update-v2__link-to-details-page',
+                                                                 'elm => elm ? elm.href.match(/([0-9]{19})/)[0] : null')
+                    if repost_link:
+                        repost_timestamp = await page.evaluate('''(post_id) => {
+                                    return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
+                                }''', repost_link)
 
-                    if await repost.querySelector('.update-components-update-v2__commentary'):
-                        repost_text = await repost.querySelectorEval('.update-components-update-v2__commentary',
-                                                                     'elm => elm ? elm.textContent.trim() : ""')
+                        if await repost.querySelector('.update-components-actor__name'):
+                            repost_actor_name = await repost.querySelectorEval('.update-components-actor__name',
+                                                                               'elm => elm.textContent.trim()')
 
+                        if await repost.querySelector('.update-components-actor__supplementary-actor-info > span'):
+                            repost_degree = await repost.querySelectorEval(
+                                '.update-components-actor__supplementary-actor-info > span',
+                                'elm => elm ? elm.textContent.trim() : ""')
+
+                        if await repost.querySelector('.update-components-update-v2__commentary'):
+                            repost_text = await repost.querySelectorEval('.update-components-update-v2__commentary',
+                                                                         'elm => elm ? elm.textContent.trim() : ""')
+                except:
+                    print("Error scraping repost, moving on")
+                    pass
             post_url = ''
+
+            timestamp_display = pd.to_datetime(timestamp, unit='ms').strftime('%Y-%m-%d %H:%M:%S')
+            print(f"Scraped post with timestamp {timestamp_display} and text: {text[0:25]}")
 
             posts.append({
                 'post_id': post_id,
@@ -193,11 +198,6 @@ async def scrape_posts(page, url, days_ago, limit):
 
         current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
         print(f"New scroll height is {current_scroll_height}")
-
-        await page.waitFor(5000)
-
-        current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
-        print(f"5 sec later, new scroll height is {current_scroll_height}")
 
         # if we have scraped the desired number of posts, break out of the loop
         oldest_timestamp = await page.evaluate('''() => {
