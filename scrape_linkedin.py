@@ -104,7 +104,7 @@ async def scrape_posts(page, url, days_ago, limit):
 
             elm_num = idx + 1
             post_selector = f'li.profile-creator-shared-feed-update__container:nth-child({elm_num}) .feed-shared-update-v2'
-            await page.waitForSelector(post_selector, {'timeout': 10000})
+            await page.waitForSelector(post_selector, {'timeout': 30000})
 
             post_id = await post.querySelectorEval('.feed-shared-update-v2',
                                                    'element => element.getAttribute("data-urn")')
