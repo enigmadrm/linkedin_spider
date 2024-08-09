@@ -85,10 +85,12 @@ async def scrape_posts(page, url, days_ago, limit):
 
     posts = []
 
+    posts_selector = 'div.scaffold-finite-scroll__content > div' if 'company' in url else 'li.profile-creator-shared-feed-update__container'
+
     # Page down until no more posts are loaded
     num_posts = 0
     while True:
-        post_elements = await page.querySelectorAll('li.profile-creator-shared-feed-update__container')
+        post_elements = await page.querySelectorAll(posts_selector)
         print(f"Total number of posts on the page: {len(post_elements)}")
 
         if len(post_elements) == num_posts:
@@ -103,11 +105,15 @@ async def scrape_posts(page, url, days_ago, limit):
             }''', post)
 
             elm_num = idx + 1
-            post_selector = f'li.profile-creator-shared-feed-update__container:nth-child({elm_num}) .feed-shared-update-v2'
+            post_selector = posts_selector + f':nth-child({elm_num}) .feed-shared-update-v2'
             await page.waitForSelector(post_selector, {'timeout': 30000})
 
             post_id = await post.querySelectorEval('.feed-shared-update-v2',
                                                    'element => element.getAttribute("data-urn")')
+
+            if not post_id:
+                continue
+
             post_id = re.search(r"([0-9]{19})", post_id).group(0)
 
             timestamp = await page.evaluate('''(post_id) => {
@@ -133,8 +139,9 @@ async def scrape_posts(page, url, days_ago, limit):
                     repost_selector = post_selector + ' a.update-components-mini-update-v2__link-to-details-page'
                     await page.waitForSelector(repost_selector, {'timeout': 10000})
 
-                    repost_link = await repost.querySelectorEval('a.update-components-mini-update-v2__link-to-details-page',
-                                                                 'elm => elm ? elm.href.match(/([0-9]{19})/)[0] : null')
+                    repost_link = await repost.querySelectorEval(
+                        'a.update-components-mini-update-v2__link-to-details-page',
+                        'elm => elm ? elm.href.match(/([0-9]{19})/)[0] : null')
                     if repost_link:
                         repost_timestamp = await page.evaluate('''(post_id) => {
                                     return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
@@ -209,7 +216,8 @@ async def scrape_posts(page, url, days_ago, limit):
         post_age = (pd.Timestamp.now() - pd.to_datetime(oldest_timestamp, unit='ms')).days
 
         if -1 < days_ago < post_age:
-            print(f"We reached a point on the page where we are seeing posts older ({post_age} days) than the ones we have scraped in the past ({days_ago} days), stopping")
+            print(
+                f"We reached a point on the page where we are seeing posts older ({post_age} days) than the ones we have scraped in the past ({days_ago} days), stopping")
             break
 
         if limit and len(posts) >= limit:
@@ -519,6 +527,7 @@ async def main():
             upload_to_vector_store(vector_store_id, json_filepath)
     else:
         print("No new posts were scraped since the last run, exiting...")
+
 
 if __name__ == "__main__":
     asyncio.get_event_loop().run_until_complete(main())
