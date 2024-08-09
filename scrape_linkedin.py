@@ -110,11 +110,9 @@ async def scrape_posts(page, url, days_ago, limit):
 
             post_id = await post.querySelectorEval('.feed-shared-update-v2',
                                                    'element => element.getAttribute("data-urn")')
-
+            post_id = re.search(r"([0-9]{19})", post_id).group(0) if re.search(r"([0-9]{19})", post_id) else None
             if not post_id:
                 continue
-
-            post_id = re.search(r"([0-9]{19})", post_id).group(0)
 
             timestamp = await page.evaluate('''(post_id) => {
                 return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
