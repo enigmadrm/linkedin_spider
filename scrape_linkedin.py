@@ -159,7 +159,7 @@ async def scrape_posts(page, url, days_ago, limit):
                             repost_text = await repost.querySelectorEval('.update-components-update-v2__commentary',
                                                                          'elm => elm ? elm.textContent.trim() : ""')
             except:
-                print("Error scraping repost, moving on")
+                print("Error scraping post, moving on")
                 pass
 
             post_url = ''
