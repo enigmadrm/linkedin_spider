@@ -105,33 +105,34 @@ async def scrape_posts(page, url, days_ago, limit):
             }''', post)
 
             elm_num = idx + 1
-            post_selector = posts_selector + f':nth-child({elm_num}) .feed-shared-update-v2'
-            await page.waitForSelector(post_selector, {'timeout': 30000})
 
-            post_id = await post.querySelectorEval('.feed-shared-update-v2',
-                                                   'element => element.getAttribute("data-urn")')
-            post_id = re.search(r"([0-9]{19})", post_id).group(0) if re.search(r"([0-9]{19})", post_id) else None
-            if not post_id:
-                continue
+            try:
+                post_selector = posts_selector + f':nth-child({elm_num}) .feed-shared-update-v2'
+                await page.waitForSelector(post_selector, {'timeout': 30000})
 
-            timestamp = await page.evaluate('''(post_id) => {
-                return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
-            }''', post_id)
+                post_id = await post.querySelectorEval('.feed-shared-update-v2',
+                                                       'element => element.getAttribute("data-urn")')
+                post_id = re.search(r"([0-9]{19})", post_id).group(0) if re.search(r"([0-9]{19})", post_id) else None
+                if not post_id:
+                    continue
 
-            actor_title = await post.querySelectorEval('.update-components-actor__name span span',
-                                                       'elm => elm.textContent.trim()')
-            actor_description = await post.querySelectorEval('.update-components-actor__description span',
-                                                             'elm => elm.textContent.trim()')
+                timestamp = await page.evaluate('''(post_id) => {
+                    return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
+                }''', post_id)
 
-            text = await post.querySelectorEval('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]',
-                                                'elm => elm ? elm.innerText : ""')
+                actor_title = await post.querySelectorEval('.update-components-actor__name span span',
+                                                           'elm => elm.textContent.trim()')
+                actor_description = await post.querySelectorEval('.update-components-actor__description span',
+                                                                 'elm => elm.textContent.trim()')
 
-            is_repost = True if await post.querySelector('.update-components-mini-update-v2') else False
+                text = await post.querySelectorEval('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]',
+                                                    'elm => elm ? elm.innerText : ""')
 
-            repost_id = repost_timestamp = repost_actor_name = repost_degree = repost_text = None
+                is_repost = True if await post.querySelector('.update-components-mini-update-v2') else False
 
-            if is_repost:
-                try:
+                repost_id = repost_timestamp = repost_actor_name = repost_degree = repost_text = None
+
+                if is_repost:
                     repost = await post.querySelector('.update-components-mini-update-v2')
 
                     repost_selector = post_selector + ' a.update-components-mini-update-v2__link-to-details-page'
@@ -157,9 +158,10 @@ async def scrape_posts(page, url, days_ago, limit):
                         if await repost.querySelector('.update-components-update-v2__commentary'):
                             repost_text = await repost.querySelectorEval('.update-components-update-v2__commentary',
                                                                          'elm => elm ? elm.textContent.trim() : ""')
-                except:
-                    print("Error scraping repost, moving on")
-                    pass
+            except:
+                print("Error scraping repost, moving on")
+                pass
+
             post_url = ''
 
             timestamp_display = pd.to_datetime(timestamp, unit='ms').strftime('%Y-%m-%d %H:%M:%S')
