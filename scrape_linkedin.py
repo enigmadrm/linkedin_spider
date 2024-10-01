@@ -345,7 +345,7 @@ def upload_to_vector_store(vector_store_id, json_filepath):
 
 
 async def main():
-    global vector_store_name, linkedin_password, linkedin_username, chrome_path, profile_dir
+    global openai_api_key, vector_store_name, linkedin_password, linkedin_username, chrome_path, profile_dir
 
     parser = argparse.ArgumentParser(
         description='Scrape LinkedIn posts and export them to Excel and/or upload them to an OpenAI vector store')
@@ -362,6 +362,7 @@ async def main():
                         action='store_true',
                         default=False)
     parser.add_argument('--store', help="The OpenAI vector store name to upload to", default=vector_store_name)
+    parser.add_argument('--key', help="The OpenAI API key", default=openai_api_key)
     parser.add_argument('--username', help="The LinkedIn username", default=linkedin_username)
     parser.add_argument('--password', help="The LinkedIn password", default=linkedin_password)
     parser.add_argument('--profile', help="The browser profile directory")
@@ -375,6 +376,9 @@ async def main():
 
     linkedin_username = args.username
     linkedin_password = args.password
+
+    if args.key:
+        openai_api_key = args.key
 
     # Determine json filename to store posts
     json_basefilepath = (url.split('/')[-1].split('?')[0] if not args.json else args.json) + '_posts'
