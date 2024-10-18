@@ -1,9 +1,6 @@
-# import aiofiles
 import argparse
 import asyncio
 import re
-import time
-
 import aiofiles
 from dotenv import load_dotenv
 import json
@@ -11,7 +8,6 @@ import mimetypes
 import os
 import pandas as pd
 import pyppeteer
-from pyppeteer.errors import TimeoutError as PyppeteerTimeoutError
 import requests
 
 load_dotenv('.env')
@@ -32,6 +28,11 @@ async def login_to_linkedin(page, username, password):
     :param password: LinkedIn password
     :return: None
     """
+    linkedin_feed_url = 'https://www.linkedin.com/feed/'
+    await page.goto(linkedin_feed_url)
+    if page.url == linkedin_feed_url:
+        return
+
     await page.goto("https://www.linkedin.com/login?fromSignIn=true&trk=guest_homepage-basic_nav-header-signin")
     await page.waitForSelector('#password')
     await page.waitFor(1000)
@@ -125,7 +126,7 @@ async def scrape_posts(page, url, days_ago, limit):
                 actor_description = await post.querySelectorEval('.update-components-actor__description span',
                                                                  'elm => elm.textContent.trim()')
 
-                text = await post.querySelectorEval('div.feed-shared-update-v2__description-wrapper.mr2 span[dir=ltr]',
+                text = await post.querySelectorEval('div.feed-shared-update-v2__description-wrapper span[dir=ltr]',
                                                     'elm => elm ? elm.innerText : ""')
 
                 is_repost = True if await post.querySelector('.update-components-mini-update-v2') else False
@@ -158,29 +159,29 @@ async def scrape_posts(page, url, days_ago, limit):
                         if await repost.querySelector('.update-components-update-v2__commentary'):
                             repost_text = await repost.querySelectorEval('.update-components-update-v2__commentary',
                                                                          'elm => elm ? elm.textContent.trim() : ""')
+                post_url = ''
+
+                timestamp_display = pd.to_datetime(timestamp, unit='ms').strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Scraped post with timestamp {timestamp_display} and text: {text[0:25]}")
+
+                posts.append({
+                    'post_id': post_id,
+                    'actor_title': actor_title,
+                    'actor_description': actor_description,
+                    'timestamp': timestamp,
+                    'text': text,
+                    'is_repost': is_repost,
+                    'repost_id': repost_id,
+                    'repost_timestamp': repost_timestamp,
+                    'repost_actor_name': repost_actor_name,
+                    'repost_degree': repost_degree,
+                    'repost_text': repost_text,
+                    'post_url': post_url
+                })
             except:
                 print("Error scraping post, moving on")
                 pass
 
-            post_url = ''
-
-            timestamp_display = pd.to_datetime(timestamp, unit='ms').strftime('%Y-%m-%d %H:%M:%S')
-            print(f"Scraped post with timestamp {timestamp_display} and text: {text[0:25]}")
-
-            posts.append({
-                'post_id': post_id,
-                'actor_title': actor_title,
-                'actor_description': actor_description,
-                'timestamp': timestamp,
-                'text': text,
-                'is_repost': is_repost,
-                'repost_id': repost_id,
-                'repost_timestamp': repost_timestamp,
-                'repost_actor_name': repost_actor_name,
-                'repost_degree': repost_degree,
-                'repost_text': repost_text,
-                'post_url': post_url
-            })
 
         print("Number of posts scraped so far: ", len(posts))
 
