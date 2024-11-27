@@ -86,7 +86,12 @@ async def scrape_posts(page, url, days_ago, limit):
 
     posts = []
 
-    posts_selector = 'div.scaffold-finite-scroll__content > div' if 'company' in url else 'li.profile-creator-shared-feed-update__container'
+    if 'company' in url:
+        posts_selector = 'div.scaffold-finite-scroll__content > div'
+    elif 'search/results' in url:
+        posts_selector = '.scaffold-finite-scroll__content > div > div > ul > li'
+    else:
+        posts_selector = 'li.profile-creator-shared-feed-update__container'
 
     # Page down until no more posts are loaded
     num_posts = 0
@@ -108,6 +113,7 @@ async def scrape_posts(page, url, days_ago, limit):
             elm_num = idx + 1
 
             try:
+                post_elements = await page.querySelectorAll(posts_selector)
                 post_selector = posts_selector + f':nth-child({elm_num}) .feed-shared-update-v2'
                 await page.waitForSelector(post_selector, {'timeout': 30000})
 
@@ -121,20 +127,20 @@ async def scrape_posts(page, url, days_ago, limit):
                     return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
                 }''', post_id)
 
-                actor_title = await post.querySelectorEval('.update-components-actor__name span span',
+                actor_title = await post.querySelectorEval('.update-components-actor__name span span, .update-components-actor__single-line-truncate span span',
                                                            'elm => elm.textContent.trim()')
                 actor_description = await post.querySelectorEval('.update-components-actor__description span',
                                                                  'elm => elm.textContent.trim()')
 
-                text = await post.querySelectorEval('div.feed-shared-update-v2__description-wrapper span[dir=ltr]',
+                text = await post.querySelectorEval('div.feed-shared-update-v2__description-wrapper span[dir=ltr],div.update-components-update-v2__commentary span[dir=ltr]',
                                                     'elm => elm ? elm.innerText : ""')
 
-                is_repost = True if await post.querySelector('.update-components-mini-update-v2') else False
+                is_repost = True if await post.querySelector('.update-components-mini-update-v2,.feed-shared-update-v2__update-content-wrapper') else False
 
                 repost_id = repost_timestamp = repost_actor_name = repost_degree = repost_text = None
 
                 if is_repost:
-                    repost = await post.querySelector('.update-components-mini-update-v2')
+                    repost = await post.querySelector('.update-components-mini-update-v2,.feed-shared-update-v2__update-content-wrapper')
 
                     repost_selector = post_selector + ' a.update-components-mini-update-v2__link-to-details-page'
                     await page.waitForSelector(repost_selector, {'timeout': 10000})
@@ -147,8 +153,8 @@ async def scrape_posts(page, url, days_ago, limit):
                                     return parseInt(BigInt(post_id).toString(2).slice(0, 41), 2);
                                 }''', repost_link)
 
-                        if await repost.querySelector('.update-components-actor__name'):
-                            repost_actor_name = await repost.querySelectorEval('.update-components-actor__name',
+                        if await repost.querySelector('.update-components-actor__name, .update-components-actor__title span[dir=ltr] > span'):
+                            repost_actor_name = await repost.querySelectorEval('.update-components-actor__name, .update-components-actor__title span[dir=ltr] > span',
                                                                                'elm => elm.textContent.trim()')
 
                         if await repost.querySelector('.update-components-actor__supplementary-actor-info > span'):
@@ -178,8 +184,8 @@ async def scrape_posts(page, url, days_ago, limit):
                     'repost_text': repost_text,
                     'post_url': post_url
                 })
-            except:
-                print("Error scraping post, moving on")
+            except Exception as e:
+                print("Error scraping post, moving on", e)
                 pass
 
 
