@@ -95,7 +95,7 @@ async def scrape_posts(page, url, days_ago, limit):
     elif 'search/results' in url:
         posts_selector = '.scaffold-finite-scroll__content > div > div > ul > li'
     else:
-        posts_selector = 'li.profile-creator-shared-feed-update__container'
+        posts_selector = 'div.scaffold-finite-scroll__content > ul > li'
 
     # Page down until no more posts are loaded
     num_posts = 0
@@ -147,7 +147,10 @@ async def scrape_posts(page, url, days_ago, limit):
                     repost = await post.querySelector('.update-components-mini-update-v2,.feed-shared-update-v2__update-content-wrapper')
 
                     repost_selector = post_selector + ' a.update-components-mini-update-v2__link-to-details-page'
-                    await page.waitForSelector(repost_selector, {'timeout': 10000})
+                    try:
+                        await page.waitForSelector(repost_selector, {'timeout': 1000})
+                    except Exception as e:
+                        continue
 
                     repost_link = await repost.querySelectorEval(
                         'a.update-components-mini-update-v2__link-to-details-page',
@@ -192,7 +195,7 @@ async def scrape_posts(page, url, days_ago, limit):
 
                 await page.waitFor(100)
             except Exception as e:
-                print("Error scraping post, moving on", e)
+                print("Error scraping post, moving on")
                 pass
 
         print("Number of posts scraped so far: ", len(posts))
@@ -216,7 +219,7 @@ async def scrape_posts(page, url, days_ago, limit):
             try:
                 await page.waitForFunction(
                     '''initialScrollHeight => document.body.scrollHeight > initialScrollHeight''',
-                    {'timeout': 15000},
+                    {'timeout': 3000},
                     last_scroll_height
                 )
             except TimeoutError:
