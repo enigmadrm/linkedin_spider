@@ -9,6 +9,10 @@ import os
 import pandas as pd
 import pyppeteer
 import requests
+import warnings
+
+# Suppress DeprecationWarning
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 load_dotenv('.env')
 openai_api_key = os.environ.get('OPENAI_API_KEY')
@@ -100,7 +104,7 @@ async def scrape_posts(page, url, days_ago, limit):
         print(f"Total number of posts on the page: {len(post_elements)}")
 
         if len(post_elements) == num_posts:
-            print("No more posts loaded")
+            print("No more posts loaded, %d out of %d posts scraped" % (num_posts, len(post_elements)))
             break
 
         # Extract and structure the scraped data
@@ -168,7 +172,8 @@ async def scrape_posts(page, url, days_ago, limit):
                 post_url = ''
 
                 timestamp_display = pd.to_datetime(timestamp, unit='ms').strftime('%Y-%m-%d %H:%M:%S')
-                print(f"Scraped post with timestamp {timestamp_display} and text: {text[0:25]}")
+                post_snippet = text[0:25].replace('\n', ' ').replace('\r', ' ')
+                print(f"Scraped post with timestamp {timestamp_display} and text: {post_snippet}")
 
                 posts.append({
                     'post_id': post_id,
@@ -184,34 +189,53 @@ async def scrape_posts(page, url, days_ago, limit):
                     'repost_text': repost_text,
                     'post_url': post_url
                 })
+
+                await page.waitFor(100)
             except Exception as e:
                 print("Error scraping post, moving on", e)
                 pass
 
-
         print("Number of posts scraped so far: ", len(posts))
 
-        # keep track of how many posts were found during this loop iteration
-        num_posts = len(post_elements)
+        # keep track of how many posts are on the page now
+        num_posts = len(posts)
 
-        # scroll down to the obttom to trigger another page of posts to load
+        # scroll down to the bottom to trigger another page of posts to load
         initial_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
         print(f"Current scroll height is {initial_scroll_height}")
 
-        print("Scrolling to load more posts...")
-        await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
+        iteration = 1
+        while True:
+            print("Scrolling to load more posts...")
 
-        try:
-            await page.waitForFunction(
-                '''initialScrollHeight => document.body.scrollHeight > initialScrollHeight''',
-                {'timeout': 15000},
-                initial_scroll_height
-            )
-        except TimeoutError:
-            pass
+            last_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
+            print(f"Current scroll height is {last_scroll_height}")
 
-        current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
-        print(f"New scroll height is {current_scroll_height}")
+            await page.evaluate('''() => window.scrollTo(0, document.body.scrollHeight)''')
+
+            try:
+                await page.waitForFunction(
+                    '''initialScrollHeight => document.body.scrollHeight > initialScrollHeight''',
+                    {'timeout': 15000},
+                    last_scroll_height
+                )
+            except TimeoutError:
+                pass
+
+            current_scroll_height = await page.evaluate('''() => document.body.scrollHeight''')
+
+            new_posts_count = len(await page.querySelectorAll(posts_selector))
+
+            iteration = iteration + 1
+
+            if iteration >= 4:
+                print("Reached maximum number of scroll iterations, stopping")
+                break
+
+            if new_posts_count > num_posts:
+                more_posts = new_posts_count - num_posts
+                print(f"New scroll height is {current_scroll_height} and found {more_posts} new posts")
+                break
 
         # if we have scraped the desired number of posts, break out of the loop
         oldest_timestamp = await page.evaluate('''() => {
@@ -377,7 +401,13 @@ async def main():
     parser.add_argument('--headless', help="Don't show the chrome browser while it's running", default=False)
     args = parser.parse_args()
 
+    print("")
+
     url = args.url or None
+
+    if url is None:
+        print("URL is required")
+        return
 
     print(f"Going to scrape URL: " + url)
 
